@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ShieldDocs - File Redaction</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <!-- PDF.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    </script>
+    <style>
+        :root {
+            --bg-base: #020612;
+            --bg-panel: rgba(10, 15, 30, 0.4);
+            --bg-nav: rgba(5, 10, 20, 0.85);
+            --primary: #3b82f6;
+            --primary-glow: #60a5fa;
+            --accent: #8b5cf6;
+            --success: #10b981;
+            --danger: #ef4444;
+            --text-main: #f8fafc;
+            --text-muted: #64748b;
+            --border: rgba(255, 255, 255, 0.08);
+            --radius-lg: 16px;
+            --radius-sm: 8px;
+            --sidebar-width: 260px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background-color: var(--bg-base);
+            color: var(--text-main);
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+        }
+        
+        .app-layout { display: flex; width: 100vw; height: 100vh; overflow: hidden; }
+
+        .ambient-lines {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: -1; opacity: 0.15; pointer-events: none;
+            background-image: repeating-linear-gradient(90deg, transparent, transparent 100px, rgba(255,255,255,0.05) 100px, rgba(255,255,255,0.05) 101px);
+        }
+
+        .bg-glows {
+            position: fixed; top:0; left: 0; width: 100vw; height: 100vh; z-index: -1; pointer-events: none;
+            background-image: radial-gradient(ellipse at 0% 0%, rgba(59, 130, 246, 0.1) 0%, transparent 40%),
+                              radial-gradient(ellipse at 100% 100%, rgba(139, 92, 246, 0.08) 0%, transparent 40%);
+        }
+
+        /* Sidebar Styles */
+        .sidebar {
+            width: var(--sidebar-width); background: var(--bg-nav); border-right: 1px solid var(--border);
+            display: flex; flex-direction: column; transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative; z-index: 100; backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+        }
+        .sidebar.collapsed { --sidebar-width: 80px; }
+        .sidebar.collapsed .nav-label, .sidebar.collapsed .logo-text, .sidebar.collapsed .user-details { opacity: 0; width: 0; overflow: hidden; pointer-events: none; }
+
+        .sidebar-header {
+            height: 80px; padding: 0 24px; display: flex; align-items: center; justify-content: space-between;
+            border-bottom: 1px solid rgba(255,255,255,0.03); white-space: nowrap;
+        }
+        .sidebar.collapsed .sidebar-header { justify-content: center; padding: 0; }
+
+        .logo-wrap { display: flex; align-items: center; gap: 12px; }
+        .logo-icon { filter: drop-shadow(0 4px 10px rgba(99, 102, 241, 0.4)); flex-shrink: 0; }
+        .logo-text { 
+            font-weight: 800; font-size: 1.35rem; letter-spacing: -0.03em;
+            background: linear-gradient(135deg, #AEB9C8 0%, #6F8FB8 50%, #2F6FE4 100%);
+            -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+        }
+
+        .btn-collapse {
+            position: absolute; right: -14px; top: 32px;
+            background: var(--bg-nav); border: 1px solid rgba(255,255,255,0.1); 
+            color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center;
+            width: 28px; height: 28px; border-radius: 50%; transition: all 0.3s;
+            z-index: 101; box-shadow: 0 0 15px rgba(0,0,0,0.5);
+        }
+        .btn-collapse svg { width: 16px; height: 16px; transition: transform 0.3s; }
+        .sidebar.collapsed .btn-collapse svg { transform: rotate(180deg); }
+        
+        /* Nav Items */
+        .sidebar-nav { flex-grow: 1; padding: 24px 0; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
+        .nav-item { display: flex; align-items: center; gap: 16px; padding: 14px 24px; text-decoration: none; font-size: 0.95rem; font-weight: 600; color: var(--text-muted); border-left: 3px solid transparent; transition: all 0.2s; white-space: nowrap; }
+        .sidebar.collapsed .nav-item { padding: 14px 0; justify-content: center; }
+        .nav-icon { width: 22px; height: 22px; flex-shrink: 0; transition: transform 0.2s, color 0.2s; }
+        .nav-item:hover { color: var(--text-main); background: rgba(255,255,255,0.02); }
+        .nav-item.active { color: var(--primary-glow); background: linear-gradient(90deg, rgba(59,130,246,0.1) 0%, transparent 100%); border-left-color: var(--primary); box-shadow: inset 4px 0 15px rgba(59,130,246,0.15); }
+        .nav-item.active .nav-icon { color: var(--primary); filter: drop-shadow(0 0 6px rgba(59,130,246,0.5)); }
+
+        .nav-section-title { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: rgba(255,255,255,0.2); padding: 8px 24px; margin-top: 16px; font-weight: 700; white-space: nowrap; }
+
+        /* Sidebar Bottom */
+        .sidebar-footer { padding: 24px 0; border-top: 1px solid rgba(255,255,255,0.03); }
+        .user-profile { display: flex; align-items: center; gap: 12px; padding: 0 24px; text-decoration: none; white-space: nowrap; }
+        .nav-avatar { width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg, #3b82f6, #8b5cf6); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.9rem; color: #fff; flex-shrink: 0; }
+        .user-details { display: flex; flex-direction: column; gap: 4px; }
+        .user-name { font-size: 0.9rem; font-weight: 600; color: var(--text-main); }
+        .user-role { font-size: 0.75rem; color: var(--text-muted); }
+
+        /* Main Content */
+        .main-content { flex-grow: 1; overflow: hidden; display: flex; flex-direction: column; position: relative; }
+        .dashboard-header { padding: 20px 48px 12px 48px; display: flex; justify-content: space-between; align-items: flex-end; flex-shrink: 0;}
+        .db-title { font-size: 2rem; font-weight: 800; letter-spacing: -0.03em; }
+        .db-subtitle { font-size: 0.95rem; color: var(--text-muted); margin-top: 8px; }
+
+        /* File Redaction Specific Styles */
+        .content-container { padding: 0 48px 24px 48px; flex-grow: 1; overflow-y: auto; }
+        .main-card { padding: 0; margin-top: 12px; overflow: hidden; border: 1px solid var(--border); border-radius: 16px; background: var(--bg-panel); backdrop-filter: blur(12px); }
+        
+        .upload-container { padding: 40px; border-bottom: 1px solid var(--border); background: rgba(255, 255, 255, 0.02); }
+        .upload-controls { display: flex; gap: 16px; align-items: center; max-width: 600px; margin: 0 auto; }
+        .upload-label { flex: 1; display: flex; align-items: center; gap: 12px; background: rgba(0,0,0,0.2); border: 1px solid var(--border); padding: 12px 20px; border-radius: 12px; color: var(--text-muted); cursor: pointer; transition: all 0.2s; }
+        .upload-label:hover { border-color: rgba(255,255,255,0.2); background: rgba(255, 255, 255, 0.05); }
+        .hidden-input { display: none; }
+
+        .viewer-header { padding: 24px 40px; border-bottom: 1px solid var(--border); background: rgba(0,0,0,0.1); }
+        .viewer-header h3 { font-size: 1.25rem; color: var(--text-main); }
+        
+        .primary-btn { 
+            background: var(--primary); color: #fff; border: none; padding: 12px 24px; 
+            border-radius: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        }
+        .primary-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4); }
+
+        .secondary-btn {
+            background: rgba(255,255,255,0.05); color: #fff; border: 1px solid rgba(255,255,255,0.1); padding: 10px 20px; 
+            border-radius: 10px; font-weight: 600; cursor: pointer; transition: all 0.2s; font-size: 0.9rem;
+        }
+        .secondary-btn:hover:not(:disabled) { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); }
+        .secondary-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+        .apply-btn { background: var(--danger); box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3); }
+        .apply-btn:hover { box-shadow: 0 6px 16px rgba(239, 68, 68, 0.4); }
+
+        .hidden { display: none !important; }
+        .loader { width: 20px; height: 20px; border: 2px solid rgba(255, 255, 255, 0.3); border-radius: 50%; border-top-color: #fff; animation: spin 1s infinite linear; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Switch styling */
+        .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(255, 255, 255, 0.1); transition: .3s; border: 1px solid var(--border); border-radius: 24px; }
+        .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 2px; bottom: 2px; background-color: white; transition: .3s; border-radius: 50%; }
+        input:checked+.slider { background-color: var(--primary); }
+        input:checked+.slider:before { transform: translateX(20px); }
+
+        .pdf-viewer-container { padding: 40px; display: flex; flex-direction: column; align-items: center; gap: 32px; background: rgba(0,0,0,0.1); min-height: 500px; }
+        
+        select { background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: #fff; padding: 10px; border-radius: 8px; outline: none; }
+    </style>
+</head>
+<body>
+    <div class="ambient-lines"></div>
+    <div class="bg-glows"></div>
+
+    <div class="app-layout">
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="logo-wrap">
+                    <svg class="logo-icon" viewBox="0 0 110 120" style="width: 32px; height: 35px;">
+                        <path d="M 55 12 L 100 24 L 100 65 C 100 95 55 115 55 115 C 55 115 10 95 10 65 L 10 24 Z" fill="#6366f1"/>
+                        <path d="M 55 23 L 80 29.5 L 80 43 L 90 43 L 90 64 C 90 88 55 103 55 103 C 55 103 20 88 20 64 L 20 32 Z" fill="#f8fafc"/>
+                        <path d="M 80 29.5 L 90 43 L 80 43 Z" fill="#3b82f6"/>
+                        <circle cx="55" cy="56" r="6" fill="#0f172a"/>
+                        <path d="M 52 58 L 58 58 L 61 74 L 49 74 Z" fill="#0f172a"/>
+                    </svg>
+                    <span class="logo-text">ShieldDocs</span>
+                </div>
+                <button class="btn-collapse" id="toggleBtn">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                </button>
+            </div>
+            
+            <nav class="sidebar-nav">
+                <div class="nav-section-title">Main Menu</div>
+                <a href="dashboard.html" class="nav-item">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>
+                    <span class="nav-label">Dashboard</span>
+                </a>
+                <a href="redact.html" class="nav-item">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+                    <span class="nav-label">Text Redaction</span>
+                </a>
+                <a href="file-redact.html" class="nav-item active">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline><rect x="6" y="14" width="12" height="6" rx="2" ry="2"></rect></svg>
+                    <span class="nav-label">File Redaction</span>
+                </a>
+                
+                <div class="nav-section-title">Records</div>
+                <a href="history.html" class="nav-item">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                    <span class="nav-label">History</span>
+                </a>
+                <a href="bin.html" class="nav-item">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                    <span class="nav-label">Bin</span>
+                </a>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="user-profile" id="userProfileBtn">
+                    <div class="nav-avatar" id="userAvatar">??</div>
+                    <div class="user-details">
+                        <span class="user-name" id="userName">Loading...</span>
+                        <span class="user-role">Administrator</span>
+                    </div>
+                </div>
+                <!-- Profile Dropdown -->
+                <div class="profile-dropdown" id="profileDropdown">
+                    <a href="profile.html" class="dropdown-item">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                        View Profile
+                    </a>
+                    <div class="dropdown-divider"></div>
+                    <a href="#" class="dropdown-item danger" id="logoutBtn">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                        Sign Out
+                    </a>
+                </div>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <div class="dashboard-header">
+                <div>
+                    <h1 class="db-title">File Redaction</h1>
+                    <p class="db-subtitle">Upload and visualize documents for secure redaction.</p>
+                </div>
+            </div>
+
+            <div class="content-container">
+                <div class="glass-card main-card">
+                    <!-- Upload Section -->
+                    <div class="upload-container">
+                        <div class="upload-controls">
+                            <label for="fileInput" class="upload-label">
+                                <span class="upload-icon">📄</span>
+                                <span id="file-name-display">Choose PDF Document</span>
+                                <input type="file" id="fileInput" accept=".pdf" class="hidden-input">
+                            </label>
+                            <button id="uploadFileBtn" class="primary-btn">
+                                <span id="btn-text">Upload PDF</span>
+                                <div id="btn-loader" class="loader hidden"></div>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Viewer Section -->
+                    <div id="viewer-wrapper" class="hidden">
+                        <div class="viewer-header">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                                <h3>Document Viewer</h3>
+                                <div class="mode-toggle-container">
+                                    <span class="mode-label">Manual</span>
+                                    <label class="switch">
+                                        <input type="checkbox" id="file-mode-toggle">
+                                        <span class="slider round"></span>
+                                    </label>
+                                    <span class="mode-label">AI Mode</span>
+                                </div>
+                            </div>
+                            <div class="toolbar" style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; background: rgba(0,0,0,0.2); padding: 16px; border-radius: 12px; border: 1px solid var(--border);">
+                                <select id="file-redact-style" style="min-width: 200px;">
+                                    <option value="">Select Redaction Type</option>
+                                    <option value="redact">Blackout</option>
+                                    <option value="xxxx">XXXXX</option>
+                                    <option value="tag">Tag</option>
+                                </select>
+                                <button id="undoRedactionBtn" class="secondary-btn" disabled>Undo Last</button>
+                                <button id="rotateDocBtn" class="secondary-btn">Rotate 90°</button>
+                                <div style="flex-grow: 1;"></div>
+                                <button id="previewBtn" class="secondary-btn" disabled>Preview</button>
+                                <button id="downloadRedactedBtn" class="secondary-btn" style="display: none;">Download Redacted PDF</button>
+                                <button id="saveRedactedBtn" class="secondary-btn" style="display: none; background: var(--success); color: white;">Save to Workspace</button>
+                                <button id="applyRedactionBtn" class="primary-btn apply-btn">Apply Redaction</button>
+                            </div>
+                        </div>
+                        <div id="pdf-viewer" class="pdf-viewer-container">
+                            <!-- Pages will be rendered here -->
+                        </div>
+                    </div>
+
+                    <!-- Preview Section -->
+                    <div id="preview-section" class="hidden" style="padding: 40px; border-top: 1px solid var(--border);">
+                        <header style="margin-bottom: 32px;">
+                            <h2 style="font-size: 1.5rem; margin-bottom: 8px;">Compare Redactions</h2>
+                            <p style="color: var(--text-muted);">Review the original document side-by-side with the redacted version.</p>
+                        </header>
+                        <div class="preview-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 32px;">
+                            <div class="preview-panel">
+                                <div class="panel-header" style="margin-bottom: 12px; font-weight: 600; color: var(--text-muted);">Original PDF</div>
+                                <div id="original-viewer" class="mini-viewer" style="background: rgba(0,0,0,0.2); border-radius: 12px; min-height: 400px; display: flex; flex-direction: column; align-items: center; padding: 20px;"></div>
+                            </div>
+                            <div class="preview-panel">
+                                <div class="panel-header" style="margin-bottom: 12px; font-weight: 600; color: var(--text-muted);">Redacted PDF</div>
+                                <div id="redacted-viewer" class="mini-viewer" style="background: rgba(0,0,0,0.2); border-radius: 12px; min-height: 400px; display: flex; flex-direction: column; align-items: center; padding: 20px;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="user-manager.js"></script>
+    <script src="script.js"></script>
+    <script>
+        // Sidebar Toggle
+        const sidebar = document.getElementById('sidebar');
+        const toggleBtn = document.getElementById('toggleBtn');
+        toggleBtn.addEventListener('click', () => sidebar.classList.toggle('collapsed'));
+        
+        // Ensure auth check
+        if (!localStorage.getItem('shieldDocsToken')) {
+            window.location.href = 'login.html';
+        }
+    </script>
+</body>
+</html>

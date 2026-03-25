@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ShieldDocs - User Profile</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        :root {
+            --bg-base: #020612;
+            --bg-panel: rgba(10, 15, 30, 0.4);
+            --bg-nav: rgba(5, 10, 20, 0.85);
+            --primary: #3b82f6;
+            --primary-glow: #60a5fa;
+            --accent: #8b5cf6;
+            --success: #10b981;
+            --danger: #ef4444;
+            --text-main: #f8fafc;
+            --text-muted: #64748b;
+            --border: rgba(255, 255, 255, 0.08);
+            --radius-lg: 16px;
+            --radius-sm: 8px;
+            --sidebar-width: 260px;
+        }
+
+        body {
+            background-color: var(--bg-base);
+            color: var(--text-main);
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            display: flex;
+            min-height: 100vh;
+        }
+
+        .layout {
+            display: flex;
+            width: 100%;
+        }
+
+        .main-content {
+            flex-grow: 1;
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .back-link {
+            align-self: flex-start;
+            color: var(--text-muted);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+            margin-bottom: 32px;
+            transition: color 0.2s;
+        }
+
+        .back-link:hover {
+            color: var(--text-main);
+        }
+
+        .profile-card {
+            width: 100%;
+            max-width: 500px;
+        }
+    </style>
+</head>
+<body>
+    <div class="layout">
+        <!-- Sidebar placeholder or include if needed, but for simplicity let's stick to a clean profile view with a back button -->
+        <main class="main-content">
+            <a href="dashboard.html" class="back-link">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+                Back to Dashboard
+            </a>
+
+            <div class="profile-card">
+                <div class="profile-header">
+                    <div class="profile-avatar-large" id="profile-avatar">??</div>
+                    <div style="text-align: center;">
+                        <h2 id="profile-display-name" style="font-size: 1.5rem; font-weight: 800; margin-bottom: 4px;">User Profile</h2>
+                        <p id="profile-display-email" style="color: var(--text-muted); font-size: 0.9rem;">user@example.com</p>
+                    </div>
+                </div>
+
+                <div class="user-id">Account Holder</div>
+                <form id="profileForm">
+                    <div class="input-row" style="display: flex; gap: 20px;">
+                        <div class="input-group" style="flex: 1;">
+                            <label>First Name</label>
+                            <input type="text" id="firstName" placeholder="First Name" required>
+                        </div>
+                        <div class="input-group" style="flex: 1;">
+                            <label>Last Name</label>
+                            <input type="text" id="lastName" placeholder="Last Name" required>
+                        </div>
+                    </div>
+                    <div class="input-group">
+                        <label>Email Address</label>
+                        <input type="email" id="email" disabled>
+                    </div>
+                    <button type="submit" class="btn-save" id="save-btn">Verify and Update Profile</button>
+                </form>
+
+                <button class="btn-danger-outline" id="delete-btn">Delete Account</button>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            const token = localStorage.getItem('shieldDocsToken');
+            if (!token) {
+                window.location.href = 'login.html';
+                return;
+            }
+
+            const firstNameInput = document.getElementById('firstName');
+            const lastNameInput = document.getElementById('lastName');
+            const emailInput = document.getElementById('email');
+            const avatarDiv = document.getElementById('profile-avatar');
+            const displayNameH2 = document.getElementById('profile-display-name');
+            const displayEmailP = document.getElementById('profile-display-email');
+            const profileForm = document.getElementById('profileForm'); // Changed ID
+            const deleteBtn = document.getElementById('delete-btn');
+
+            // Fetch current user data
+            try {
+                const res = await fetch('http://127.0.0.1:5000/api/auth/me', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!res.ok) throw new Error('Failed to fetch profile');
+                
+                const user = await res.json();
+                firstNameInput.value = user.firstName || '';
+                lastNameInput.value = user.lastName || '';
+                emailInput.value = user.email;
+                displayNameH2.textContent = `${user.firstName || ''} ${user.lastName || ''}`.trim();
+                displayEmailP.textContent = user.email;
+                
+                // Set initials
+                const initials = (user.firstName ? user.firstName[0] : '') + (user.lastName ? user.lastName[0] : '');
+                avatarDiv.textContent = initials.toUpperCase();
+                
+            } catch (err) {
+                console.error(err);
+                alert('Error loading profile');
+            }
+
+            // Update profile
+            profileForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const saveBtn = document.getElementById('save-btn');
+                const originalText = saveBtn.textContent;
+                saveBtn.disabled = true;
+                saveBtn.textContent = 'Updating...';
+
+                try {
+                    const res = await fetch('http://127.0.0.1:5000/api/auth/profile', {
+                        method: 'PUT',
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}` 
+                        },
+                        body: JSON.stringify({ 
+                            firstName: firstNameInput.value,
+                            lastName: lastNameInput.value
+                        })
+                    });
+                    
+                    if (!res.ok) throw new Error('Update failed');
+                  if (res.ok) {
+                    const user = await res.json();
+                    document.getElementById('firstName').value = user.firstName;
+                    document.getElementById('lastName').value = user.lastName;
+                    document.getElementById('email').value = user.email;
+                    
+                    const initials = (user.firstName[0] + (user.lastName[0] || '')).toUpperCase();
+                    document.getElementById('profile-avatar').innerText = initials; // Updated ID
+                    document.getElementById('profile-display-name').innerText = user.firstName + ' ' + user.lastName; // Updated ID
+                }
+    setTimeout(() => {
+                        saveBtn.disabled = false;
+                        saveBtn.textContent = originalText;
+                    }, 2000);
+                } catch (err) {
+                    console.error(err);
+                    alert('Error updating profile');
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = originalText;
+                }
+            });
+
+            // Delete account
+            deleteBtn.addEventListener('click', async () => {
+                if (confirm('Are you absolutely sure? This will delete your entire account and all your documents. This action cannot be undone.')) {
+                    try {
+                        const res = await fetch('http://127.0.0.1:5000/api/auth/account', {
+                            method: 'DELETE',
+                            headers: { 'Authorization': `Bearer ${token}` }
+                        });
+                        
+                        if (!res.ok) throw new Error('Deletion failed');
+                        
+                        localStorage.removeItem('shieldDocsToken');
+                        alert('Account deleted successfully. Safe travels!');
+                        window.location.href = 'login.html';
+                    } catch (err) {
+                        console.error(err);
+                        alert('Error deleting account');
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>
