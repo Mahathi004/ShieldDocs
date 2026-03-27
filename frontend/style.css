@@ -69,15 +69,6 @@ a:hover {
     margin-bottom: 8px;
 }
 
-.logo-icon {
-    width: 240px;
-    height: 64px;
-    background-image: url('logo-inline.svg');
-    background-size: contain;
-    background-repeat: no-repeat;
-    background-position: center;
-}
-
 .logo-container h1 {
     display: none;
 }
@@ -228,15 +219,6 @@ select option {
     display: flex;
     align-items: center;
     gap: 12px;
-}
-
-.logo-icon-small {
-    width: 150px;
-    height: 40px;
-    background-image: url('logo-inline.svg');
-    background-size: contain;
-    background-repeat: no-repeat;
-    background-position: center;
 }
 
 .nav-left h2 {
